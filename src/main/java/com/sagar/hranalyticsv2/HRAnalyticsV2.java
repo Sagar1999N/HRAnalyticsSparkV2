@@ -57,6 +57,35 @@ public class HRAnalyticsV2 {
 			System.out.println(d.toString());
 		}
 
+		// TODO
+		// Avg Salary : Average salary of employees per department
+		JavaPairRDD<String, Integer> deptSalaryPairs = employees
+				.mapToPair(e -> new Tuple2<>(e.getDepartment(), e.getSalary()));
 
+		for (Tuple2<String, Integer> d : deptSalaryPairs.collect()) {
+			System.out.println(d.toString());
+		}
+
+		JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCount = deptSalaryPairs
+				.mapValues(sal -> new Tuple2<>(sal, 1));// .reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 +
+														// b._2));
+
+		for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCount.collect()) {
+			System.out.println(d.toString());
+		}
+
+		JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCountR = deptSumCount
+				.reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 + b._2));
+
+		for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCountR.collect()) {
+			System.out.println(d.toString());
+		}
+
+		JavaPairRDD<String, Double> deptSumCountAvg = deptSumCountR
+				.mapValues(sc -> Double.valueOf(sc._1) / Double.valueOf(sc._2));
+
+		for (Tuple2<String, Double> d : deptSumCountAvg.collect()) {
+			System.out.println(d.toString());
+		}
 	}
 }
