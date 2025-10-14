@@ -24,6 +24,7 @@ public class HRAnalyticsV2 {
 		for (String e : emps.collect()) {
 			System.out.println(e);
 		}
+		System.out.println("-------------------");
 
 		String header = emps.first();
 		System.out.println(header);
@@ -37,6 +38,7 @@ public class HRAnalyticsV2 {
 			}
 			System.out.println();
 		}
+		System.out.println("-------------------");
 
 		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
@@ -46,6 +48,7 @@ public class HRAnalyticsV2 {
 		for (Employee d : employees.collect()) {
 			System.out.println(d.toString());
 		}
+		System.out.println("-------------------");
 
 		System.out.println("richEmployees");
 
@@ -56,6 +59,7 @@ public class HRAnalyticsV2 {
 		for (Employee d : richEmployees.collect()) {
 			System.out.println(d.toString());
 		}
+		System.out.println("-------------------");
 
 		// TODO
 		// Avg Salary : Average salary of employees per department
@@ -65,6 +69,7 @@ public class HRAnalyticsV2 {
 		for (Tuple2<String, Integer> d : deptSalaryPairs.collect()) {
 			System.out.println(d.toString());
 		}
+		System.out.println("-------------------");
 
 		JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCount = deptSalaryPairs
 				.mapValues(sal -> new Tuple2<>(sal, 1));// .reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 +
@@ -73,6 +78,7 @@ public class HRAnalyticsV2 {
 		for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCount.collect()) {
 			System.out.println(d.toString());
 		}
+		System.out.println("-------------------");
 
 		JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCountR = deptSumCount
 				.reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 + b._2));
@@ -80,6 +86,7 @@ public class HRAnalyticsV2 {
 		for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCountR.collect()) {
 			System.out.println(d.toString());
 		}
+		System.out.println("-------------------");
 
 		JavaPairRDD<String, Double> deptSumCountAvg = deptSumCountR
 				.mapValues(sc -> Double.valueOf(sc._1) / Double.valueOf(sc._2));
@@ -87,6 +94,7 @@ public class HRAnalyticsV2 {
 		for (Tuple2<String, Double> d : deptSumCountAvg.collect()) {
 			System.out.println(d.toString());
 		}
+		System.out.println("-------------------");
 
 		// TODO
 		// Top Earners : Top 2 earners per department
@@ -96,6 +104,7 @@ public class HRAnalyticsV2 {
 		for (Tuple2<String, Tuple2<Employee, Integer>> d : empSalaryPairs.collect()) {
 			System.out.println(d.toString());
 		}
+		System.out.println("-------------------");
 
 		JavaPairRDD<String, Iterable<Tuple2<Employee, Integer>>> empSalaryPairsGroup = empSalaryPairs.groupByKey();
 
@@ -127,5 +136,6 @@ public class HRAnalyticsV2 {
 		for (Tuple2<String, Tuple2<String, Integer>> d : flat.collect()) {
 			System.out.println(d);
 		}
+		System.out.println("-------------------");
 	}
 }
