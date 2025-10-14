@@ -87,5 +87,45 @@ public class HRAnalyticsV2 {
 		for (Tuple2<String, Double> d : deptSumCountAvg.collect()) {
 			System.out.println(d.toString());
 		}
+
+		// TODO
+		// Top Earners : Top 2 earners per department
+		JavaPairRDD<String, Tuple2<Employee, Integer>> empSalaryPairs = employees
+				.mapToPair(e -> new Tuple2<>(e.getDepartment(), new Tuple2<>(e, e.getSalary())));
+
+		for (Tuple2<String, Tuple2<Employee, Integer>> d : empSalaryPairs.collect()) {
+			System.out.println(d.toString());
+		}
+
+		JavaPairRDD<String, Iterable<Tuple2<Employee, Integer>>> empSalaryPairsGroup = empSalaryPairs.groupByKey();
+
+		JavaPairRDD<String, Iterable<Tuple2<Employee, Integer>>> top2perDept = empSalaryPairsGroup.mapValues(itr -> {
+			List<Tuple2<Employee, Integer>> list = new ArrayList<>();
+			itr.forEach(list::add);
+			list.sort((a, b) -> b._2.compareTo(a._2));
+//			return list.subList(0, Math.min(2, list.size()));
+			return new ArrayList<>(list.subList(0, Math.min(2, list.size())));
+
+		});
+
+		for (Tuple2<String, Iterable<Tuple2<Employee, Integer>>> a : top2perDept.collect()) {
+			System.out.println("Department : " + a._1);
+			for (Tuple2<Employee, Integer> b : a._2) {
+				System.out.println(b._1.getName() + "," + b._2);
+			}
+			System.out.println("-------------------");
+		}
+
+		JavaPairRDD<String, Tuple2<String, Integer>> flat = top2perDept.flatMapToPair(dept -> {
+			List<Tuple2<String, Tuple2<String, Integer>>> list = new ArrayList<>();
+			for (Tuple2<Employee, Integer> e : dept._2) {
+				list.add(new Tuple2<>(dept._1, new Tuple2<>(e._1.getName(), e._2)));
+			}
+			return list.iterator();
+		});
+
+		for (Tuple2<String, Tuple2<String, Integer>> d : flat.collect()) {
+			System.out.println(d);
+		}
 	}
 }
