@@ -1,5 +1,6 @@
 package com.sagar.hranalyticsv2;
 
+import java.sql.Date;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -7,7 +8,18 @@ import java.util.List;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.FilterFunction;
+import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoder;
+import org.apache.spark.sql.Encoders;
+import org.apache.spark.sql.KeyValueGroupedDataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.TypedColumn;
+import org.apache.spark.sql.functions;
+import org.apache.spark.sql.expressions.javalang.typed;
+import org.apache.spark.sql.types.StructType;
 
 import com.sagar.pojo.Employee;
 
@@ -17,37 +29,115 @@ public class HRAnalyticsV2 {
 
 	public static void main(String[] args) {
 
-		SparkSession sparkSession = SparkSession.builder().master("local[*]").appName("HRAnalyticsV2").getOrCreate();
+		SparkSession sparkSession = SparkSession.builder().appName("HRAnalyticsV2").master("local[*]").getOrCreate();
+
+		rDDTransformations(sparkSession);
+
+		datasetTransformations(sparkSession);
+
+		sparkSession.stop();
+	}
+
+	private static void datasetTransformations(SparkSession sparkSession) {
+		// ✅ Define schema explicitly so Spark reads correct types
+		StructType schema = new StructType().add("employee_id", "int").add("name", "string").add("department", "string")
+				.add("salary", "int").add("joining_date", "string"); // We'll convert manually below
+
+		// ✅ Read CSV
+		Dataset<Row> df = sparkSession.read().option("header", true).schema(schema).csv("./data/input/*.csv");
+
+		// ✅ Convert joining_date (string → proper date format)
+		df = df.withColumn("joining_date", functions.to_date(functions.col("joining_date"), "M/d/yyyy"));
+
+		// ✅ Create encoder for Employee POJO
+		Encoder<Employee> empEncoder = Encoders.bean(Employee.class);
+
+		// ✅ Convert DataFrame<Row> to Dataset<Employee>
+		Dataset<Employee> empDataset = df.as(empEncoder);
+
+		// ✅ Filter Example 1: Using Lambda
+		Dataset<Employee> richEmployees1 = empDataset.filter((FilterFunction<Employee>) e -> e.getSalary() > 5000);
+
+		richEmployees1.show();
+
+		// ✅ Filter Example 2: Using SQL Expression
+		Dataset<Employee> richEmployees2 = empDataset.filter("salary > 5000");
+
+		richEmployees2.show();
+
+		// ✅ Average Salary 1: Using API result DataFrame
+		Dataset<Row> avgSalaryPerDepartment1 = empDataset.groupBy("department")
+				.agg(functions.avg("salary").as("avg_salary"));
+
+		avgSalaryPerDepartment1.show();
+
+		// ✅ Average Salary 2: Using API result Dataset
+		KeyValueGroupedDataset<String, Employee> groupByDept = empDataset
+				.groupByKey((MapFunction<Employee, String>) Employee::getDepartment, Encoders.STRING());
+
+		Dataset<Tuple2<String, Double>> avgSalaryPerDepartmentTyped = groupByDept
+				.agg((TypedColumn<Employee, Double>) typed
+						.avg((MapFunction<Employee, Double>) e -> e.getSalary().doubleValue()).name("avg_salary"));
+
+		avgSalaryPerDepartmentTyped.show();
+
+		// ✅ Average Salary 3: Using Spark SQL result Dataset
+		empDataset.createOrReplaceTempView("employees");
+
+		Dataset<Row> avgSalaryPerDepartment3 = empDataset.sparkSession()
+				.sql("select department,AVG(salary) as avg_salary from employees group by department");
+
+		avgSalaryPerDepartment3.show();
+
+		// ✅ Average Salary 4: Using API result DataFrame starting with DataFrame
+		Dataset<Row> empDataFrame = empDataset.toDF();
+
+		empDataFrame.createOrReplaceTempView("employeesDF");
+
+		Dataset<Row> avgSalaryPerDepartment4 = empDataFrame.sparkSession()
+				.sql("select department,AVG(salary) as avg_salary from employeesDF group by department");
+
+		avgSalaryPerDepartment4.show();
+
+		// Practice code
+		Encoder<Tuple2<Employee, String>> tupleEncoder = Encoders.tuple(empEncoder, Encoders.STRING());
+
+		Dataset<Tuple2<Employee, String>> sampleMap = empDataset
+				.map((MapFunction<Employee, Tuple2<Employee, String>>) e -> new Tuple2<>(e, e.getName()), tupleEncoder);
+	}
+
+	private static void rDDTransformations(SparkSession sparkSession) {
 		try (JavaSparkContext javaSparkContext = new JavaSparkContext(sparkSession.sparkContext())) {
+
 			JavaRDD<String> emps = javaSparkContext.textFile("./data/input/*.csv");
-//		for (String e : emps.collect()) {
-//			System.out.println(e);
-//		}
-//		System.out.println("-------------------");
+			// for (String e : emps.collect()) {
+			// System.out.println(e);
+			// }
+			// System.out.println("-------------------");
 
 			String header = emps.first();
-//		System.out.println(header);
+			// System.out.println(header);
 
 			emps = emps.filter(x -> !(x.equals(header)));
 
 			JavaRDD<String[]> data = emps.map(x -> x.split(","));
-//		for (String[] d : data.collect()) {
-//			for (String id : d) {
-//				System.out.print(id + ",");
-//			}
-//			System.out.println();
-//		}
-//		System.out.println("-------------------");
+			// for (String[] d : data.collect()) {
+			// for (String id : d) {
+			// System.out.print(id + ",");
+			// }
+			// System.out.println();
+			// }
+			// System.out.println("-------------------");
 
 			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
 			JavaRDD<Employee> employees = data.map(parts -> new Employee(Integer.parseInt(parts[0]), parts[1], parts[2],
-					Integer.parseInt(parts[3]), sdf.parse(parts[4])));
+					Integer.parseInt(parts[3]), (Date) sdf.parse(parts[4])));
 
-//		for (Employee d : employees.collect()) {
-//			System.out.println(d.toString());
-//		}
-//		System.out.println("-------------------");
+			// for (Employee d : employees.collect()) {
+			// System.out.println(d.toString());
+			// }
+			// System.out.println("-------------------");
 
 			System.out.println("Rich Employees (Salary > 5000)");
 
@@ -65,27 +155,27 @@ public class HRAnalyticsV2 {
 			JavaPairRDD<String, Integer> deptSalaryPairs = employees
 					.mapToPair(e -> new Tuple2<>(e.getDepartment(), e.getSalary()));
 
-//		for (Tuple2<String, Integer> d : deptSalaryPairs.collect()) {
-//			System.out.println(d.toString());
-//		}
-//		System.out.println("-------------------");
+			// for (Tuple2<String, Integer> d : deptSalaryPairs.collect()) {
+			// System.out.println(d.toString());
+			// }
+			// System.out.println("-------------------");
 
 			JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCount = deptSalaryPairs
 					.mapValues(sal -> new Tuple2<>(sal, 1));// .reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 +
 															// b._2));
 
-//		for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCount.collect()) {
-//			System.out.println(d.toString());
-//		}
-//		System.out.println("-------------------");
+			// for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCount.collect()) {
+			// System.out.println(d.toString());
+			// }
+			// System.out.println("-------------------");
 
 			JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCountR = deptSumCount
 					.reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 + b._2));
 
-//		for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCountR.collect()) {
-//			System.out.println(d.toString());
-//		}
-//		System.out.println("-------------------");
+			// for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCountR.collect()) {
+			// System.out.println(d.toString());
+			// }
+			// System.out.println("-------------------");
 
 			JavaPairRDD<String, Double> deptSumCountAvg = deptSumCountR
 					.mapValues(sc -> Double.valueOf(sc._1) / Double.valueOf(sc._2));
@@ -102,10 +192,11 @@ public class HRAnalyticsV2 {
 			JavaPairRDD<String, Tuple2<Employee, Integer>> empSalaryPairs = employees
 					.mapToPair(e -> new Tuple2<>(e.getDepartment(), new Tuple2<>(e, e.getSalary())));
 
-//		for (Tuple2<String, Tuple2<Employee, Integer>> d : empSalaryPairs.collect()) {
-//			System.out.println(d.toString());
-//		}
-//		System.out.println("-------------------");
+			// for (Tuple2<String, Tuple2<Employee, Integer>> d : empSalaryPairs.collect())
+			// {
+			// System.out.println(d.toString());
+			// }
+			// System.out.println("-------------------");
 
 			JavaPairRDD<String, Iterable<Tuple2<Employee, Integer>>> empSalaryPairsGroup = empSalaryPairs.groupByKey();
 
@@ -114,7 +205,7 @@ public class HRAnalyticsV2 {
 						List<Tuple2<Employee, Integer>> list = new ArrayList<>();
 						itr.forEach(list::add);
 						list.sort((a, b) -> b._2.compareTo(a._2));
-//			return list.subList(0, Math.min(2, list.size()));
+						// return list.subList(0, Math.min(2, list.size()));
 						return new ArrayList<>(list.subList(0, Math.min(2, list.size())));
 
 					});

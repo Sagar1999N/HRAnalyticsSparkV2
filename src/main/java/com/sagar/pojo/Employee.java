@@ -1,7 +1,7 @@
 package com.sagar.pojo;
 
 import java.io.Serializable;
-import java.util.Date;
+import java.sql.Date;
 
 public class Employee implements Serializable {
 
@@ -50,6 +50,9 @@ public class Employee implements Serializable {
 	public void setJoining_date(Date joining_date) {
 		this.joining_date = joining_date;
 	}
+	
+    public Employee() {
+    }
 
 	public Employee(Integer employee_id, String name, String department, Integer salary, Date joining_date) {
 		super();
