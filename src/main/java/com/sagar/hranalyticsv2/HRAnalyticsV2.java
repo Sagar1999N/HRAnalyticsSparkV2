@@ -29,6 +29,8 @@ public class HRAnalyticsV2 {
 
 	public static void main(String[] args) {
 
+		System.out.println("Started");
+
 		SparkSession sparkSession = SparkSession.builder().appName("HRAnalyticsV2").master("local[*]").getOrCreate();
 
 		rDDTransformations(sparkSession);
@@ -36,6 +38,9 @@ public class HRAnalyticsV2 {
 		datasetTransformations(sparkSession);
 
 		sparkSession.stop();
+
+		System.out.println("Ended");
+
 	}
 
 	private static void datasetTransformations(SparkSession sparkSession) {
@@ -107,132 +112,130 @@ public class HRAnalyticsV2 {
 	}
 
 	private static void rDDTransformations(SparkSession sparkSession) {
-		try (JavaSparkContext javaSparkContext = new JavaSparkContext(sparkSession.sparkContext())) {
+		JavaSparkContext javaSparkContext = new JavaSparkContext(sparkSession.sparkContext());
 
-			JavaRDD<String> emps = javaSparkContext.textFile("./data/input/*.csv");
-			// for (String e : emps.collect()) {
-			// System.out.println(e);
-			// }
-			// System.out.println("-------------------");
+		JavaRDD<String> emps = javaSparkContext.textFile("./data/input/*.csv");
+		// for (String e : emps.collect()) {
+		// System.out.println(e);
+		// }
+		// System.out.println("-------------------");
 
-			String header = emps.first();
-			// System.out.println(header);
+		String header = emps.first();
+		// System.out.println(header);
 
-			emps = emps.filter(x -> !(x.equals(header)));
+		emps = emps.filter(x -> !(x.equals(header)));
 
-			JavaRDD<String[]> data = emps.map(x -> x.split(","));
-			// for (String[] d : data.collect()) {
-			// for (String id : d) {
-			// System.out.print(id + ",");
-			// }
-			// System.out.println();
-			// }
-			// System.out.println("-------------------");
+		JavaRDD<String[]> data = emps.map(x -> x.split(","));
+		// for (String[] d : data.collect()) {
+		// for (String id : d) {
+		// System.out.print(id + ",");
+		// }
+		// System.out.println();
+		// }
+		// System.out.println("-------------------");
 
-			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
-			JavaRDD<Employee> employees = data.map(parts -> new Employee(Integer.parseInt(parts[0]), parts[1], parts[2],
-					Integer.parseInt(parts[3]), (Date) sdf.parse(parts[4])));
+		JavaRDD<Employee> employees = data.map(parts -> new Employee(Integer.parseInt(parts[0]), parts[1], parts[2],
+				Integer.parseInt(parts[3]), new Date(sdf.parse(parts[4]).getTime())));
 
-			// for (Employee d : employees.collect()) {
-			// System.out.println(d.toString());
-			// }
-			// System.out.println("-------------------");
+		// for (Employee d : employees.collect()) {
+		// System.out.println(d.toString());
+		// }
+		// System.out.println("-------------------");
 
-			System.out.println("Rich Employees (Salary > 5000)");
+		System.out.println("Rich Employees (Salary > 5000)");
 
-			// TODO
-			// Rich Employees : having salary greater than 5000
-			JavaRDD<Employee> richEmployees = employees.filter(e -> e.getSalary() > 5000);
+		// TODO
+		// Rich Employees : having salary greater than 5000
+		JavaRDD<Employee> richEmployees = employees.filter(e -> e.getSalary() > 5000);
 
-			for (Employee d : richEmployees.collect()) {
-				System.out.println(d.toString());
+		for (Employee d : richEmployees.collect()) {
+			System.out.println(d.toString());
+		}
+		System.out.println("-------------------");
+
+		// TODO
+		// Avg Salary : Average salary of employees per department
+		JavaPairRDD<String, Integer> deptSalaryPairs = employees
+				.mapToPair(e -> new Tuple2<>(e.getDepartment(), e.getSalary()));
+
+		// for (Tuple2<String, Integer> d : deptSalaryPairs.collect()) {
+		// System.out.println(d.toString());
+		// }
+		// System.out.println("-------------------");
+
+		JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCount = deptSalaryPairs
+				.mapValues(sal -> new Tuple2<>(sal, 1));// .reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 +
+														// b._2));
+
+		// for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCount.collect()) {
+		// System.out.println(d.toString());
+		// }
+		// System.out.println("-------------------");
+
+		JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCountR = deptSumCount
+				.reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 + b._2));
+
+		// for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCountR.collect()) {
+		// System.out.println(d.toString());
+		// }
+		// System.out.println("-------------------");
+
+		JavaPairRDD<String, Double> deptSumCountAvg = deptSumCountR
+				.mapValues(sc -> Double.valueOf(sc._1) / Double.valueOf(sc._2));
+
+		System.out.println("Average Salary per Department");
+
+		for (Tuple2<String, Double> d : deptSumCountAvg.collect()) {
+			System.out.println(d.toString());
+		}
+		System.out.println("-------------------");
+
+		// TODO
+		// Top Earners : Top 2 earners per department
+		JavaPairRDD<String, Tuple2<Employee, Integer>> empSalaryPairs = employees
+				.mapToPair(e -> new Tuple2<>(e.getDepartment(), new Tuple2<>(e, e.getSalary())));
+
+		// for (Tuple2<String, Tuple2<Employee, Integer>> d : empSalaryPairs.collect())
+		// {
+		// System.out.println(d.toString());
+		// }
+		// System.out.println("-------------------");
+
+		JavaPairRDD<String, Iterable<Tuple2<Employee, Integer>>> empSalaryPairsGroup = empSalaryPairs.groupByKey();
+
+		JavaPairRDD<String, Iterable<Tuple2<Employee, Integer>>> top2perDept = empSalaryPairsGroup.mapValues(itr -> {
+			List<Tuple2<Employee, Integer>> list = new ArrayList<>();
+			itr.forEach(list::add);
+			list.sort((a, b) -> b._2.compareTo(a._2));
+			// return list.subList(0, Math.min(2, list.size()));
+			return new ArrayList<>(list.subList(0, Math.min(2, list.size())));
+
+		});
+
+		System.out.println("Top 2 Earners per Department");
+
+		for (Tuple2<String, Iterable<Tuple2<Employee, Integer>>> a : top2perDept.collect()) {
+			System.out.println("Department : " + a._1);
+			for (Tuple2<Employee, Integer> b : a._2) {
+				System.out.println(b._1.getName() + "," + b._2);
 			}
 			System.out.println("-------------------");
+		}
 
-			// TODO
-			// Avg Salary : Average salary of employees per department
-			JavaPairRDD<String, Integer> deptSalaryPairs = employees
-					.mapToPair(e -> new Tuple2<>(e.getDepartment(), e.getSalary()));
-
-			// for (Tuple2<String, Integer> d : deptSalaryPairs.collect()) {
-			// System.out.println(d.toString());
-			// }
-			// System.out.println("-------------------");
-
-			JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCount = deptSalaryPairs
-					.mapValues(sal -> new Tuple2<>(sal, 1));// .reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 +
-															// b._2));
-
-			// for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCount.collect()) {
-			// System.out.println(d.toString());
-			// }
-			// System.out.println("-------------------");
-
-			JavaPairRDD<String, Tuple2<Integer, Integer>> deptSumCountR = deptSumCount
-					.reduceByKey((a, b) -> new Tuple2<>(a._1 + b._1, a._2 + b._2));
-
-			// for (Tuple2<String, Tuple2<Integer, Integer>> d : deptSumCountR.collect()) {
-			// System.out.println(d.toString());
-			// }
-			// System.out.println("-------------------");
-
-			JavaPairRDD<String, Double> deptSumCountAvg = deptSumCountR
-					.mapValues(sc -> Double.valueOf(sc._1) / Double.valueOf(sc._2));
-
-			System.out.println("Average Salary per Department");
-
-			for (Tuple2<String, Double> d : deptSumCountAvg.collect()) {
-				System.out.println(d.toString());
+		JavaPairRDD<String, Tuple2<String, Integer>> flat = top2perDept.flatMapToPair(dept -> {
+			List<Tuple2<String, Tuple2<String, Integer>>> list = new ArrayList<>();
+			for (Tuple2<Employee, Integer> e : dept._2) {
+				list.add(new Tuple2<>(dept._1, new Tuple2<>(e._1.getName(), e._2)));
 			}
-			System.out.println("-------------------");
+			return list.iterator();
+		});
 
-			// TODO
-			// Top Earners : Top 2 earners per department
-			JavaPairRDD<String, Tuple2<Employee, Integer>> empSalaryPairs = employees
-					.mapToPair(e -> new Tuple2<>(e.getDepartment(), new Tuple2<>(e, e.getSalary())));
+		System.out.println("Top 2 Earners per Department (Flattened)");
 
-			// for (Tuple2<String, Tuple2<Employee, Integer>> d : empSalaryPairs.collect())
-			// {
-			// System.out.println(d.toString());
-			// }
-			// System.out.println("-------------------");
-
-			JavaPairRDD<String, Iterable<Tuple2<Employee, Integer>>> empSalaryPairsGroup = empSalaryPairs.groupByKey();
-
-			JavaPairRDD<String, Iterable<Tuple2<Employee, Integer>>> top2perDept = empSalaryPairsGroup
-					.mapValues(itr -> {
-						List<Tuple2<Employee, Integer>> list = new ArrayList<>();
-						itr.forEach(list::add);
-						list.sort((a, b) -> b._2.compareTo(a._2));
-						// return list.subList(0, Math.min(2, list.size()));
-						return new ArrayList<>(list.subList(0, Math.min(2, list.size())));
-
-					});
-
-			System.out.println("Top 2 Earners per Department");
-
-			for (Tuple2<String, Iterable<Tuple2<Employee, Integer>>> a : top2perDept.collect()) {
-				System.out.println("Department : " + a._1);
-				for (Tuple2<Employee, Integer> b : a._2) {
-					System.out.println(b._1.getName() + "," + b._2);
-				}
-				System.out.println("-------------------");
-			}
-
-			JavaPairRDD<String, Tuple2<String, Integer>> flat = top2perDept.flatMapToPair(dept -> {
-				List<Tuple2<String, Tuple2<String, Integer>>> list = new ArrayList<>();
-				for (Tuple2<Employee, Integer> e : dept._2) {
-					list.add(new Tuple2<>(dept._1, new Tuple2<>(e._1.getName(), e._2)));
-				}
-				return list.iterator();
-			});
-
-			System.out.println("Top 2 Earners per Department (Flattened)");
-
-			for (Tuple2<String, Tuple2<String, Integer>> d : flat.collect()) {
-				System.out.println(d);
-			}
+		for (Tuple2<String, Tuple2<String, Integer>> d : flat.collect()) {
+			System.out.println(d);
 		}
 
 		System.out.println("-------------------");

@@ -1,9 +1,8 @@
 employee_id,name,department,salary,joining_date
-101,Alice,IT,7000,3/1/2019
-102,Bob,HR,4000,7/15/2020
-103,Charlie,Finance,9000,6/23/2018
-104,David,IT,3000,2/11/2021
-105,Eve,Finance,6000,8/30/2019
-106,Frank,HR,2500,1/1/2022
-107,Grace,IT,10000,12/12/2017
-108,Helen,Finance,4500,5/5/2020
+1,John,IT,7000,2021-01-01
+2,Alice,HR,5500,2020-06-12
+3,Bob,IT,6000,2021-07-23
+4,Eve,Finance,4500,2019-03-05
+5,Charlie,HR,8000,2022-02-14
+6,David,Finance,9000,2020-08-30
+7,Raj,IT,10000,2023-04-10
